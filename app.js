@@ -3,16 +3,16 @@ const container = document.getElementById('container');
 
 // Track cursor positions and images
 let cursors = {};
+const DEFAULT_CURSOR = "data:image/svg+xml;base64," + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M7,4 L25,16 L14,17 L12,28 L7,4" fill="white" stroke="black" stroke-width="1.5"/></svg>`);
 
 async function initialize() {
   await room.initialize();
 
-  // Initialize my cursor position
-  const existingPresence = room.presence[room.clientId];
+  // Initialize my cursor position with default cursor
   room.updatePresence({
-    x: existingPresence?.x || 0,
-    y: existingPresence?.y || 0,
-    cursorImage: existingPresence?.cursorImage || null
+    x: 0,
+    y: 0,
+    cursorImage: DEFAULT_CURSOR
   });
 
   // Listen for cursor movements
@@ -21,12 +21,13 @@ async function initialize() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Ensure we keep the existing cursor image when updating position
-    const currentPresence = room.presence[room.clientId];
+    // Ensure we always include the current cursor image in updates
+    const currentCursorImage = room.presence[room.clientId]?.cursorImage || DEFAULT_CURSOR;
+    
     room.updatePresence({
       x,
       y,
-      cursorImage: currentPresence?.cursorImage || null
+      cursorImage: currentCursorImage
     });
   });
 
@@ -56,6 +57,7 @@ function updateCursors(presence) {
       cursorEl.className = 'cursor';
       
       const img = document.createElement('img');
+      img.src = data.cursorImage || DEFAULT_CURSOR; // Use default if not provided
       cursorEl.appendChild(img);
       
       const username = document.createElement('div');
@@ -73,8 +75,10 @@ function updateCursors(presence) {
     cursor.element.style.top = `${data.y}px`;
     
     const img = cursor.element.querySelector('img');
-    if (data.cursorImage && img.src !== data.cursorImage) {
-      img.src = data.cursorImage;
+    // Always ensure the cursor image is set and up to date
+    const imageUrl = data.cursorImage || DEFAULT_CURSOR;
+    if (img.src !== imageUrl) {
+      img.src = imageUrl;
     }
   }
 }
@@ -125,9 +129,14 @@ async function generateCursor() {
 
     // Update presence with new cursor image
     const cursorUrl = canvas.toDataURL('image/png');
+    
+    // Make sure we include both position and image in the update
+    const currentX = room.presence[room.clientId]?.x || 0;
+    const currentY = room.presence[room.clientId]?.y || 0;
+    
     room.updatePresence({
-      x: room.presence[room.clientId]?.x || 0,
-      y: room.presence[room.clientId]?.y || 0,
+      x: currentX,
+      y: currentY,
       cursorImage: cursorUrl
     });
 
