@@ -7,11 +7,12 @@ let cursors = {};
 async function initialize() {
   await room.initialize();
 
-  // Initialize my cursor position
+  // Initialize my cursor position with any existing cursor image from presence
+  const existingPresence = room.presence[room.clientId];
   room.updatePresence({
     x: 0,
     y: 0,
-    cursorImage: null
+    cursorImage: existingPresence?.cursorImage || null
   });
 
   // Listen for cursor movements
@@ -134,4 +135,3 @@ async function generateCursor() {
 }
 
 initialize();
-
