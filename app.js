@@ -7,11 +7,11 @@ let cursors = {};
 async function initialize() {
   await room.initialize();
 
-  // Initialize my cursor position with any existing cursor image from presence
+  // Initialize my cursor position
   const existingPresence = room.presence[room.clientId];
   room.updatePresence({
-    x: 0,
-    y: 0,
+    x: existingPresence?.x || 0,
+    y: existingPresence?.y || 0,
     cursorImage: existingPresence?.cursorImage || null
   });
 
@@ -21,10 +21,12 @@ async function initialize() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
+    // Ensure we keep the existing cursor image when updating position
+    const currentPresence = room.presence[room.clientId];
     room.updatePresence({
       x,
       y,
-      cursorImage: room.presence[room.clientId]?.cursorImage
+      cursorImage: currentPresence?.cursorImage || null
     });
   });
 
