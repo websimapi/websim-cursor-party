@@ -95,10 +95,13 @@ async function generateCursor() {
       height: 256
     });
 
+    // Use the generated image URL directly
+    const generatedImageUrl = result.url;
+    
     // Create a canvas to process the image
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.src = result.url;
+    img.src = generatedImageUrl;
     
     await new Promise((resolve) => {
       img.onload = resolve;
@@ -127,8 +130,11 @@ async function generateCursor() {
     
     ctx.putImageData(imageData, 0, 0);
 
-    // Update presence with new cursor image
-    const cursorUrl = canvas.toDataURL('image/png');
+    // Convert the canvas to a blob and upload it
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    
+    // Upload the image and get a URL
+    const cursorUrl = await websim.upload(blob);
     
     // Make sure we include both position and image in the update
     const currentX = room.presence[room.clientId]?.x || 0;
@@ -137,7 +143,7 @@ async function generateCursor() {
     room.updatePresence({
       x: currentX,
       y: currentY,
-      cursorImage: cursorUrl
+      cursorImage: cursorUrl // Now using the uploaded image URL instead of data URL
     });
 
   } catch (error) {
