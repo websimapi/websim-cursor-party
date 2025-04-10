@@ -217,4 +217,4 @@ async function downloadCursorAsLinux(imageUrl, fileName) {
   }
 }
 
-export { downloadCursorAsWin, downloadCursorAsLinux };
+export { downloadCursorAsWin, downloadCursorAsLinux, loadImage };
