@@ -4,12 +4,30 @@
   <meta charset="UTF-8">
   <title>Cursor Party!</title>
   <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
     #container {
       position: relative;
       width: 640px;
       height: 480px;
       border: 1px solid #000;
       overflow: hidden;
+      transition: transform 0.3s ease;
+      transform-origin: center;
+      background: white;
+    }
+    #container.fullscreen {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(var(--scale-factor));
+      border: none;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
     }
     .cursor {
       position: absolute;
@@ -33,6 +51,19 @@
     }
     #controls {
       margin: 10px 0;
+      z-index: 1000;
+    }
+    .fullscreen-btn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 5px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .fullscreen-btn:hover {
+      background: #45a049;
     }
   </style>
 </head>
@@ -40,6 +71,7 @@
   <div id="controls">
     <input type="text" id="prompt" placeholder="Describe your cursor...">
     <button onclick="generateCursor()">Generate Cursor</button>
+    <button onclick="toggleFullscreen()" class="fullscreen-btn">Toggle Fullscreen</button>
   </div>
   <div id="container"></div>
 
@@ -54,4 +86,3 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
-

@@ -5,6 +5,21 @@ const container = document.getElementById('container');
 let cursors = {};
 const DEFAULT_CURSOR = "data:image/svg+xml;base64," + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M7,4 L25,16 L14,17 L12,28 L7,4" fill="white" stroke="black" stroke-width="1.5"/></svg>`);
 
+function toggleFullscreen() {
+  const container = document.getElementById('container');
+  container.classList.toggle('fullscreen');
+  
+  if (container.classList.contains('fullscreen')) {
+    // Calculate scale factor to fit screen while maintaining aspect ratio
+    const vw = Math.min(window.innerWidth, window.innerHeight * (640/480));
+    const vh = Math.min(window.innerHeight, window.innerWidth * (480/640));
+    const scale = Math.min(vw/640, vh/480);
+    
+    // Apply scale as CSS variable
+    container.style.setProperty('--scale-factor', scale);
+  }
+}
+
 async function initialize() {
   await room.initialize();
 
@@ -152,3 +167,13 @@ async function generateCursor() {
 }
 
 initialize();
+
+window.addEventListener('resize', () => {
+  const container = document.getElementById('container');
+  if (container.classList.contains('fullscreen')) {
+    const vw = Math.min(window.innerWidth, window.innerHeight * (640/480));
+    const vh = Math.min(window.innerHeight, window.innerWidth * (480/640));
+    const scale = Math.min(vw/640, vh/480);
+    container.style.setProperty('--scale-factor', scale);
+  }
+});
