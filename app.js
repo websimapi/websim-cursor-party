@@ -10,6 +10,101 @@ let currentPage = 1;
 const itemsPerPage = 20;
 let totalCursors = 0;
 
+let customContainers = {};
+let activeContainer = 'main';
+
+async function createCustomContainer() {
+  const prompt = document.getElementById('container-prompt').value;
+  if (!prompt) return;
+
+  try {
+    // Query the LLM to generate container code
+    const completion = await websim.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: `You are a web developer specializing in interactive containers.
+Generate HTML, CSS, and JS for a 640x480 container based on the user's description.
+The container must include:
+- A div with class "custom-container" and unique id
+- Internal styling in a <style> tag
+- Any custom JavaScript in a <script> tag
+- Must maintain 640x480 dimensions
+- Must support cursor presence/movement tracking
+Respond with pure HTML including all necessary code, no explanation needed.`
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    // Create container record in database
+    const container = await room.collection('custom_container').create({
+      prompt: prompt,
+      code: completion.content,
+      host: room.clientId
+    });
+
+    // Add to local tracking
+    await loadCustomContainer(container);
+
+  } catch (error) {
+    console.error('Error creating custom container:', error);
+  }
+}
+
+async function loadCustomContainer(container) {
+  const customContainersDiv = document.getElementById('custom-containers');
+  
+  // Create wrapper for the custom container
+  const wrapper = document.createElement('div');
+  wrapper.className = 'container-wrapper';
+  wrapper.id = `wrapper-${container.id}`;
+  
+  // Add container header
+  const header = document.createElement('div');
+  header.className = 'container-header';
+  header.innerHTML = `
+    <div class="container-title">${container.prompt}</div>
+    <div class="container-host">Host: ${container.username}</div>
+    <div class="container-status" id="status-${container.id}">Waiting for host</div>
+  `;
+  
+  wrapper.appendChild(header);
+  
+  // Insert the LLM-generated content
+  wrapper.insertAdjacentHTML('beforeend', container.code);
+  
+  customContainersDiv.appendChild(wrapper);
+  
+  // Store reference to container
+  customContainers[container.id] = {
+    element: wrapper,
+    host: container.host,
+    active: false
+  };
+  
+  // Setup mouse tracking for this container
+  const containerElement = wrapper.querySelector('.custom-container');
+  containerElement.addEventListener('mousemove', (e) => {
+    if (activeContainer !== container.id) return;
+    
+    const rect = containerElement.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    room.updatePresence({
+      x,
+      y,
+      cursorImage: room.presence[room.clientId]?.cursorImage || DEFAULT_CURSOR,
+      isActive: true,
+      containerId: container.id
+    });
+  });
+}
+
 async function initialize() {
   await room.initialize();
 
@@ -83,6 +178,89 @@ async function initialize() {
   room.subscribePresence((presence) => {
     updateCursors(presence);
   });
+
+  // Subscribe to custom containers
+  room.collection('custom_container').subscribe(async (containers) => {
+    // Load any new containers
+    for (const container of containers) {
+      if (!customContainers[container.id]) {
+        await loadCustomContainer(container);
+      }
+    }
+    
+    // Update container statuses based on presence
+    for (const container of containers) {
+      const statusEl = document.getElementById(`status-${container.id}`);
+      if (statusEl) {
+        const isHostPresent = room.presence[container.host]?.isActive;
+        statusEl.textContent = isHostPresent ? 'Host Active' : 'Waiting for host';
+        statusEl.classList.toggle('active', isHostPresent);
+      }
+    }
+  });
+}
+
+function updateCursors(presence) {
+  // Remove disconnected cursors
+  for (const cursorId in cursors) {
+    if (!presence[cursorId]) {
+      cursors[cursorId].element.remove();
+      delete cursors[cursorId];
+    }
+  }
+
+  // Update or create cursors
+  for (const clientId in presence) {
+    const data = presence[clientId];
+    if (!data || !data.isActive) {
+      if (cursors[clientId]) {
+        cursors[clientId].element.remove();
+        delete cursors[clientId];
+      }
+      continue;
+    }
+
+    // Determine which container to show the cursor in
+    const targetContainer = data.containerId ? 
+      document.querySelector(`#wrapper-${data.containerId} .custom-container`) : 
+      container;
+
+    if (!targetContainer) continue;
+
+    if (!cursors[clientId]) {
+      // Create new cursor element
+      const cursorEl = document.createElement('div');
+      cursorEl.className = 'cursor';
+
+      const img = document.createElement('img');
+      img.src = data.cursorImage || DEFAULT_CURSOR;
+      cursorEl.appendChild(img);
+
+      const username = document.createElement('div');
+      username.className = 'username';
+      username.textContent = room.peers[clientId]?.username || 'Anonymous';
+      cursorEl.appendChild(username);
+
+      targetContainer.appendChild(cursorEl);
+      cursors[clientId] = { element: cursorEl };
+    }
+
+    // Update cursor position and image
+    const cursor = cursors[clientId];
+    cursor.element.style.left = `${data.x}px`;
+    cursor.element.style.top = `${data.y}px`;
+
+    // Move cursor to correct container if needed
+    if (cursor.element.parentElement !== targetContainer) {
+      targetContainer.appendChild(cursor.element);
+    }
+
+    const img = cursor.element.querySelector('img');
+    const imageUrl = data.cursorImage || DEFAULT_CURSOR;
+    if (img.src !== imageUrl) {
+      img.src = imageUrl;
+    }
+  }
 }
 
 // Function to update the gallery display
@@ -176,59 +354,6 @@ async function updateGallery() {
     });
   } catch (error) {
     console.error('Error updating gallery:', error);
-  }
-}
-
-function updateCursors(presence) {
-  // Remove disconnected cursors
-  for (const cursorId in cursors) {
-    if (!presence[cursorId]) {
-      cursors[cursorId].element.remove();
-      delete cursors[cursorId];
-    }
-  }
-
-  // Update or create cursors
-  for (const clientId in presence) {
-    const data = presence[clientId];
-    if (!data || !data.isActive) {
-      // Remove cursor element if user is not active
-      if (cursors[clientId]) {
-        cursors[clientId].element.remove();
-        delete cursors[clientId];
-      }
-      continue;
-    }
-
-    if (!cursors[clientId]) {
-      // Create new cursor element
-      const cursorEl = document.createElement('div');
-      cursorEl.className = 'cursor';
-
-      const img = document.createElement('img');
-      img.src = data.cursorImage || DEFAULT_CURSOR; // Use default if not provided
-      cursorEl.appendChild(img);
-
-      const username = document.createElement('div');
-      username.className = 'username';
-      username.textContent = room.peers[clientId]?.username || 'Anonymous';
-      cursorEl.appendChild(username);
-
-      container.appendChild(cursorEl);
-      cursors[clientId] = { element: cursorEl };
-    }
-
-    // Update cursor position and image
-    const cursor = cursors[clientId];
-    cursor.element.style.left = `${data.x}px`;
-    cursor.element.style.top = `${data.y}px`;
-
-    const img = cursor.element.querySelector('img');
-    // Always ensure the cursor image is set and up to date
-    const imageUrl = data.cursorImage || DEFAULT_CURSOR;
-    if (img.src !== imageUrl) {
-      img.src = imageUrl;
-    }
   }
 }
 

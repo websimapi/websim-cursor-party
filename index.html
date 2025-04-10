@@ -161,6 +161,67 @@
       color: #666;
       margin: 5px 0;
     }
+
+    .container-wrapper {
+      margin: 20px 0;
+    }
+    
+    .custom-container {
+      position: relative;
+      margin: 20px 0;
+      padding: 10px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+    }
+    
+    .container-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 5px;
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+    
+    .container-title {
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .container-host {
+      font-size: 0.9em;
+      color: #666;
+    }
+    
+    .container-status {
+      font-size: 0.8em;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: #e0e0e0;
+    }
+    
+    .container-status.active {
+      background: #4CAF50;
+      color: white;
+    }
+
+    #container-creator {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+
+    #container-prompt {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      height: 60px;
+    }
   </style>
 </head>
 <body>
@@ -181,6 +242,12 @@
   <h3>Playground</h3>
   <button id="start-button">Click to Start</button>
   <div class="cursor-status">Press ESC to show default cursor</div>
+  <div id="container-creator">
+    <h3>Create Custom Container</h3>
+    <textarea id="container-prompt" placeholder="Describe the container environment you want to create..."></textarea>
+    <button onclick="createCustomContainer()">Generate Container</button>
+  </div>
+  <div id="custom-containers"></div>
   <div id="container"></div>
 
   <script type="importmap">
