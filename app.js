@@ -56,100 +56,134 @@ Respond with pure HTML including all necessary code, no explanation needed.`
 }
 
 async function loadCustomContainer(container) {
+  if (!container || !container.id || !container.code) {
+    console.error('Invalid container data:', container);
+    return;
+  }
+
   const customContainersDiv = document.getElementById('custom-containers');
-  
-  // Create wrapper for the custom container
-  const wrapper = document.createElement('div');
-  wrapper.className = 'container-wrapper';
-  wrapper.id = `wrapper-${container.id}`;
-  
-  // Add container header
-  const header = document.createElement('div');
-  header.className = 'container-header';
-  header.innerHTML = `
-    <div class="container-title">${container.prompt}</div>
-    <div class="container-host">Host: ${container.username}</div>
-    <div class="container-status" id="status-${container.id}">Waiting for host</div>
-  `;
-  
-  wrapper.appendChild(header);
-  
-  // Parse the LLM response into a document fragment
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(container.code, 'text/html');
-  
-  // Extract and inject styles
-  const styles = doc.querySelectorAll('style');
-  styles.forEach(style => {
-    // Scope all styles to this container's ID to prevent conflicts
-    const scopedStyle = document.createElement('style');
-    scopedStyle.textContent = style.textContent.replace(
-      /\.custom-container/g, 
-      `#wrapper-${container.id} .custom-container`
-    );
-    wrapper.appendChild(scopedStyle);
-  });
-  
-  // Extract and inject the container HTML
-  const containerEl = doc.querySelector('.custom-container');
-  if (containerEl) {
-    containerEl.id = `container-${container.id}`;
-    wrapper.appendChild(containerEl);
+  if (!customContainersDiv) {
+    console.error('Custom containers div not found');
+    return;
   }
   
-  // Extract and inject scripts
-  const scripts = doc.querySelectorAll('script');
-  scripts.forEach(script => {
-    const newScript = document.createElement('script');
-    // Add container ID as a property to help scope any JS
-    newScript.textContent = `
-      (function() {
-        const containerId = '${container.id}';
-        const containerElement = document.querySelector('#container-${container.id}');
-        ${script.textContent}
-      })();
+  // Remove existing container if it exists
+  const existingWrapper = document.getElementById(`wrapper-${container.id}`);
+  if (existingWrapper) {
+    existingWrapper.remove();
+  }
+  
+  try {
+    // Create wrapper for the custom container
+    const wrapper = document.createElement('div');
+    wrapper.className = 'container-wrapper';
+    wrapper.id = `wrapper-${container.id}`;
+    
+    // Add container header
+    const header = document.createElement('div');
+    header.className = 'container-header';
+    header.innerHTML = `
+      <div class="container-title">${container.prompt || 'Untitled Container'}</div>
+      <div class="container-host">Host: ${container.username || 'Anonymous'}</div>
+      <div class="container-status" id="status-${container.id}">Waiting for host</div>
     `;
-    wrapper.appendChild(newScript);
-  });
-  
-  customContainersDiv.appendChild(wrapper);
-  
-  // Store reference to container
-  customContainers[container.id] = {
-    element: wrapper,
-    host: container.host,
-    active: false
-  };
-  
-  // Setup mouse tracking for this container
-  const containerElement = wrapper.querySelector('.custom-container');
-  containerElement.addEventListener('mousemove', (e) => {
-    if (!room.presence[container.host]?.isActive) return; // Only track if host is active
     
-    const rect = containerElement.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    wrapper.appendChild(header);
     
-    room.updatePresence({
-      x,
-      y,
-      cursorImage: room.presence[room.clientId]?.cursorImage || DEFAULT_CURSOR,
-      isActive: true,
-      containerId: container.id
+    // Parse the LLM response into a document fragment
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(container.code, 'text/html');
+    
+    // Extract and inject styles
+    const styles = doc.querySelectorAll('style');
+    styles.forEach(style => {
+      if (style && style.textContent) {
+        const scopedStyle = document.createElement('style');
+        scopedStyle.textContent = style.textContent.replace(
+          /\.custom-container/g, 
+          `#wrapper-${container.id} .custom-container`
+        );
+        wrapper.appendChild(scopedStyle);
+      }
     });
-  });
-  
-  // Add container exit listener
-  containerElement.addEventListener('mouseleave', () => {
-    // Reset presence to main container when leaving
-    const currentPresence = room.presence[room.clientId];
-    if (currentPresence?.containerId === container.id) {
-      room.updatePresence({
-        ...currentPresence,
-        containerId: null
+    
+    // Extract and inject the container HTML
+    const containerEl = doc.querySelector('.custom-container');
+    if (containerEl) {
+      containerEl.id = `container-${container.id}`;
+      wrapper.appendChild(containerEl);
+    } else {
+      console.error('No .custom-container element found in generated code');
+      return;
+    }
+    
+    // Extract and inject scripts
+    const scripts = doc.querySelectorAll('script');
+    scripts.forEach(script => {
+      if (script && script.textContent) {
+        const newScript = document.createElement('script');
+        // Add container ID as a property to help scope any JS
+        newScript.textContent = `
+          (function() {
+            try {
+              const containerId = '${container.id}';
+              const containerElement = document.querySelector('#container-${container.id}');
+              if (!containerElement) {
+                console.error('Container element not found:', containerId);
+                return;
+              }
+              ${script.textContent}
+            } catch (error) {
+              console.error('Error in container script:', error);
+            }
+          })();
+        `;
+        wrapper.appendChild(newScript);
+      }
+    });
+    
+    customContainersDiv.appendChild(wrapper);
+    
+    // Store reference to container
+    customContainers[container.id] = {
+      element: wrapper,
+      host: container.host,
+      active: false
+    };
+    
+    // Setup mouse tracking for this container
+    const containerElement = wrapper.querySelector('.custom-container');
+    if (containerElement) {
+      containerElement.addEventListener('mousemove', (e) => {
+        if (!room.presence[container.host]?.isActive) return;
+        
+        const rect = containerElement.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        room.updatePresence({
+          x,
+          y,
+          cursorImage: room.presence[room.clientId]?.cursorImage || DEFAULT_CURSOR,
+          isActive: true,
+          containerId: container.id
+        });
+      });
+      
+      // Add container exit listener
+      containerElement.addEventListener('mouseleave', () => {
+        const currentPresence = room.presence[room.clientId];
+        if (currentPresence?.containerId === container.id) {
+          room.updatePresence({
+            ...currentPresence,
+            containerId: null
+          });
+        }
       });
     }
-  });
+  } catch (error) {
+    console.error('Error loading custom container:', error);
+  }
 }
 
 async function initialize() {
