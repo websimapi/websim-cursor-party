@@ -102,6 +102,35 @@
       width: 100%;
       white-space: nowrap;
     }
+    .gallery-container {
+      position: relative;
+    }
+    
+    .page-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    
+    .page-button {
+      padding: 5px 15px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .page-button:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    #page-info {
+      display: inline-block;
+      margin: 0 10px;
+    }
   </style>
 </head>
 <body>
@@ -111,7 +140,14 @@
     <button onclick="generateCursor()">Generate Cursor</button>
   </div>
   <h3>Cursor Gallery</h3>
-  <div id="gallery"></div>
+  <div class="gallery-container">
+    <div id="gallery"></div>
+    <div class="page-buttons">
+      <button id="prev-page" class="page-button" onclick="previousPage()">Previous</button>
+      <span id="page-info">Page 1</span>
+      <button id="next-page" class="page-button" onclick="nextPage()">Next</button>
+    </div>
+  </div>
   <h3>Playground</h3>
   <div id="container"></div>
 

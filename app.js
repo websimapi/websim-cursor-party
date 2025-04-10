@@ -6,6 +6,10 @@ const gallery = document.getElementById('gallery');
 let cursors = {};
 const DEFAULT_CURSOR = "data:image/svg+xml;base64," + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M7,4 L25,16 L14,17 L12,28 L7,4" fill="white" stroke="black" stroke-width="1.5"/></svg>`);
 
+let currentPage = 1;
+const itemsPerPage = 20;
+let totalCursors = 0;
+
 async function initialize() {
   await room.initialize();
 
@@ -82,7 +86,21 @@ async function updateGallery() {
     // Sort cursors by creation date, newest first
     cursorsList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
-    cursorsList.forEach(cursor => {
+    // Calculate pagination
+    totalCursors = cursorsList.length;
+    const totalPages = Math.ceil(totalCursors / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, cursorsList.length);
+    
+    // Update page info and button states
+    document.getElementById('page-info').textContent = `Page ${currentPage} of ${Math.max(1, totalPages)}`;
+    document.getElementById('prev-page').disabled = currentPage === 1;
+    document.getElementById('next-page').disabled = currentPage >= totalPages;
+    
+    // Display only the cursors for the current page
+    const pageItems = cursorsList.slice(startIndex, endIndex);
+    
+    pageItems.forEach(cursor => {
       if (!cursor.imageUrl) return; // Skip if no image URL
       
       const item = document.createElement('div');
@@ -104,7 +122,6 @@ async function updateGallery() {
       item.appendChild(prompt);
       
       item.onclick = () => {
-        // Update the current user's cursor
         const currentX = room.presence[room.clientId]?.x || 0;
         const currentY = room.presence[room.clientId]?.y || 0;
         
@@ -114,7 +131,6 @@ async function updateGallery() {
           cursorImage: cursor.imageUrl
         });
         
-        // Highlight the selected item
         document.querySelectorAll('.gallery-item').forEach(el => {
           el.style.border = '1px solid #ddd';
         });
@@ -171,6 +187,21 @@ function updateCursors(presence) {
     if (img.src !== imageUrl) {
       img.src = imageUrl;
     }
+  }
+}
+
+function nextPage() {
+  const totalPages = Math.ceil(totalCursors / itemsPerPage);
+  if (currentPage < totalPages) {
+    currentPage++;
+    updateGallery();
+  }
+}
+
+function previousPage() {
+  if (currentPage > 1) {
+    currentPage--;
+    updateGallery();
   }
 }
 
