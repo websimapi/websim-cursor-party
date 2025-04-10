@@ -11,6 +11,11 @@ async function initialize() {
 
   // Load and display the cursor gallery
   updateGallery();
+  
+  // Set up a subscription to the cursor collection to keep the gallery updated
+  room.collection('cursor').subscribe(() => {
+    updateGallery();
+  });
 
   // Initialize my cursor position with default cursor
   room.updatePresence({
@@ -43,41 +48,84 @@ async function initialize() {
 
 // Function to update the gallery display
 async function updateGallery() {
-  const cursorsList = await room.collection('cursor').getList();
-  gallery.innerHTML = '';
-  
-  // Sort cursors by creation date, newest first
-  cursorsList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  
-  cursorsList.forEach(cursor => {
-    const item = document.createElement('div');
-    item.className = 'gallery-item';
+  try {
+    const cursorsList = await room.collection('cursor').getList();
+    gallery.innerHTML = '';
     
-    const img = document.createElement('img');
-    img.src = cursor.imageUrl;
+    // Add default cursor option
+    const defaultItem = document.createElement('div');
+    defaultItem.className = 'gallery-item';
     
-    const prompt = document.createElement('div');
-    prompt.className = 'prompt';
-    prompt.title = cursor.prompt;
-    prompt.textContent = cursor.prompt;
+    const defaultImg = document.createElement('img');
+    defaultImg.src = DEFAULT_CURSOR;
     
-    item.appendChild(img);
-    item.appendChild(prompt);
+    const defaultPrompt = document.createElement('div');
+    defaultPrompt.className = 'prompt';
+    defaultPrompt.textContent = 'Default';
     
-    item.onclick = () => {
-      // Update the current user's cursor
+    defaultItem.appendChild(defaultImg);
+    defaultItem.appendChild(defaultPrompt);
+    
+    defaultItem.onclick = () => {
       const currentX = room.presence[room.clientId]?.x || 0;
       const currentY = room.presence[room.clientId]?.y || 0;
       
       room.updatePresence({
         x: currentX,
         y: currentY,
-        cursorImage: cursor.imageUrl
+        cursorImage: DEFAULT_CURSOR
       });
     };
     
-    gallery.appendChild(item);
-  });
+    gallery.appendChild(defaultItem);
+    
+    // Sort cursors by creation date, newest first
+    cursorsList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    cursorsList.forEach(cursor => {
+      if (!cursor.imageUrl) return; // Skip if no image URL
+      
+      const item = document.createElement('div');
+      item.className = 'gallery-item';
+      
+      const img = document.createElement('img');
+      img.src = cursor.imageUrl;
+      img.onerror = () => {
+        img.src = DEFAULT_CURSOR; // Fallback if image fails to load
+        console.error('Failed to load cursor image:', cursor.imageUrl);
+      };
+      
+      const prompt = document.createElement('div');
+      prompt.className = 'prompt';
+      prompt.title = cursor.prompt || 'Unknown';
+      prompt.textContent = cursor.prompt || 'Unknown';
+      
+      item.appendChild(img);
+      item.appendChild(prompt);
+      
+      item.onclick = () => {
+        // Update the current user's cursor
+        const currentX = room.presence[room.clientId]?.x || 0;
+        const currentY = room.presence[room.clientId]?.y || 0;
+        
+        room.updatePresence({
+          x: currentX,
+          y: currentY,
+          cursorImage: cursor.imageUrl
+        });
+        
+        // Highlight the selected item
+        document.querySelectorAll('.gallery-item').forEach(el => {
+          el.style.border = '1px solid #ddd';
+        });
+        item.style.border = '2px solid #0066ff';
+      };
+      
+      gallery.appendChild(item);
+    });
+  } catch (error) {
+    console.error('Error updating gallery:', error);
+  }
 }
 
 function updateCursors(presence) {
@@ -184,9 +232,6 @@ async function generateCursor() {
       imageUrl: cursorUrl,
       prompt: prompt
     });
-    
-    // Update the gallery
-    updateGallery();
     
     // Make sure we include both position and image in the update
     const currentX = room.presence[room.clientId]?.x || 0;
