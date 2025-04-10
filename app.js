@@ -74,8 +74,43 @@ async function loadCustomContainer(container) {
   
   wrapper.appendChild(header);
   
-  // Insert the LLM-generated content
-  wrapper.insertAdjacentHTML('beforeend', container.code);
+  // Parse the LLM response into a document fragment
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(container.code, 'text/html');
+  
+  // Extract and inject styles
+  const styles = doc.querySelectorAll('style');
+  styles.forEach(style => {
+    // Scope all styles to this container's ID to prevent conflicts
+    const scopedStyle = document.createElement('style');
+    scopedStyle.textContent = style.textContent.replace(
+      /\.custom-container/g, 
+      `#wrapper-${container.id} .custom-container`
+    );
+    wrapper.appendChild(scopedStyle);
+  });
+  
+  // Extract and inject the container HTML
+  const containerEl = doc.querySelector('.custom-container');
+  if (containerEl) {
+    containerEl.id = `container-${container.id}`;
+    wrapper.appendChild(containerEl);
+  }
+  
+  // Extract and inject scripts
+  const scripts = doc.querySelectorAll('script');
+  scripts.forEach(script => {
+    const newScript = document.createElement('script');
+    // Add container ID as a property to help scope any JS
+    newScript.textContent = `
+      (function() {
+        const containerId = '${container.id}';
+        const containerElement = document.querySelector('#container-${container.id}');
+        ${script.textContent}
+      })();
+    `;
+    wrapper.appendChild(newScript);
+  });
   
   customContainersDiv.appendChild(wrapper);
   
@@ -89,7 +124,7 @@ async function loadCustomContainer(container) {
   // Setup mouse tracking for this container
   const containerElement = wrapper.querySelector('.custom-container');
   containerElement.addEventListener('mousemove', (e) => {
-    if (activeContainer !== container.id) return;
+    if (!room.presence[container.host]?.isActive) return; // Only track if host is active
     
     const rect = containerElement.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -102,6 +137,18 @@ async function loadCustomContainer(container) {
       isActive: true,
       containerId: container.id
     });
+  });
+  
+  // Add container exit listener
+  containerElement.addEventListener('mouseleave', () => {
+    // Reset presence to main container when leaving
+    const currentPresence = room.presence[room.clientId];
+    if (currentPresence?.containerId === container.id) {
+      room.updatePresence({
+        ...currentPresence,
+        containerId: null
+      });
+    }
   });
 }
 
