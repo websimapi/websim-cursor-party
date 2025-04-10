@@ -1,27 +1,16 @@
 const room = new WebsimSocket();
 const container = document.getElementById('container');
+const gallery = document.getElementById('gallery');
 
 // Track cursor positions and images
 let cursors = {};
 const DEFAULT_CURSOR = "data:image/svg+xml;base64," + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M7,4 L25,16 L14,17 L12,28 L7,4" fill="white" stroke="black" stroke-width="1.5"/></svg>`);
 
-function toggleFullscreen() {
-  const container = document.getElementById('container');
-  container.classList.toggle('fullscreen');
-  
-  if (container.classList.contains('fullscreen')) {
-    // Calculate scale factor to fit screen while maintaining aspect ratio
-    const vw = Math.min(window.innerWidth, window.innerHeight * (640/480));
-    const vh = Math.min(window.innerHeight, window.innerWidth * (480/640));
-    const scale = Math.min(vw/640, vh/480);
-    
-    // Apply scale as CSS variable
-    container.style.setProperty('--scale-factor', scale);
-  }
-}
-
 async function initialize() {
   await room.initialize();
+
+  // Load and display the cursor gallery
+  updateGallery();
 
   // Initialize my cursor position with default cursor
   room.updatePresence({
@@ -49,6 +38,45 @@ async function initialize() {
   // Subscribe to presence changes
   room.subscribePresence((presence) => {
     updateCursors(presence);
+  });
+}
+
+// Function to update the gallery display
+async function updateGallery() {
+  const cursorsList = await room.collection('cursor').getList();
+  gallery.innerHTML = '';
+  
+  // Sort cursors by creation date, newest first
+  cursorsList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  
+  cursorsList.forEach(cursor => {
+    const item = document.createElement('div');
+    item.className = 'gallery-item';
+    
+    const img = document.createElement('img');
+    img.src = cursor.imageUrl;
+    
+    const prompt = document.createElement('div');
+    prompt.className = 'prompt';
+    prompt.title = cursor.prompt;
+    prompt.textContent = cursor.prompt;
+    
+    item.appendChild(img);
+    item.appendChild(prompt);
+    
+    item.onclick = () => {
+      // Update the current user's cursor
+      const currentX = room.presence[room.clientId]?.x || 0;
+      const currentY = room.presence[room.clientId]?.y || 0;
+      
+      room.updatePresence({
+        x: currentX,
+        y: currentY,
+        cursorImage: cursor.imageUrl
+      });
+    };
+    
+    gallery.appendChild(item);
   });
 }
 
@@ -151,6 +179,15 @@ async function generateCursor() {
     // Upload the image and get a URL
     const cursorUrl = await websim.upload(blob);
     
+    // Store the cursor in the database
+    await room.collection('cursor').create({
+      imageUrl: cursorUrl,
+      prompt: prompt
+    });
+    
+    // Update the gallery
+    updateGallery();
+    
     // Make sure we include both position and image in the update
     const currentX = room.presence[room.clientId]?.x || 0;
     const currentY = room.presence[room.clientId]?.y || 0;
@@ -158,7 +195,7 @@ async function generateCursor() {
     room.updatePresence({
       x: currentX,
       y: currentY,
-      cursorImage: cursorUrl // Now using the uploaded image URL instead of data URL
+      cursorImage: cursorUrl
     });
 
   } catch (error) {
@@ -167,13 +204,3 @@ async function generateCursor() {
 }
 
 initialize();
-
-window.addEventListener('resize', () => {
-  const container = document.getElementById('container');
-  if (container.classList.contains('fullscreen')) {
-    const vw = Math.min(window.innerWidth, window.innerHeight * (640/480));
-    const vh = Math.min(window.innerHeight, window.innerWidth * (480/640));
-    const scale = Math.min(vw/640, vh/480);
-    container.style.setProperty('--scale-factor', scale);
-  }
-});
