@@ -238,5 +238,6 @@ window.cursorService = {
   getCurrentCursorImage,
   updateCurrentCursor,
   generateCursor,
-  initCursorTracking
+  initCursorTracking,
+  updateCursors
 };
