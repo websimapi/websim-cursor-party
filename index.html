@@ -15,6 +15,9 @@
       overflow: hidden;
       background-color: #f9f9f9;
     }
+    #container.cursor-active {
+      cursor: none;
+    }
     .cursor {
       position: absolute;
       pointer-events: none;
@@ -131,6 +134,33 @@
       display: inline-block;
       margin: 0 10px;
     }
+    #start-button {
+      display: block;
+      width: 200px;
+      margin: 10px 0;
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    #start-button:hover {
+      background: #45a049;
+    }
+    
+    #start-button.active {
+      background: #f44336;
+    }
+    
+    .cursor-status {
+      font-size: 14px;
+      color: #666;
+      margin: 5px 0;
+    }
   </style>
 </head>
 <body>
@@ -149,6 +179,8 @@
     </div>
   </div>
   <h3>Playground</h3>
+  <button id="start-button">Click to Start</button>
+  <div class="cursor-status">Press ESC to show default cursor</div>
   <div id="container"></div>
 
   <script type="importmap">
