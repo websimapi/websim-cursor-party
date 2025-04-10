@@ -2,8 +2,6 @@ const room = new WebsimSocket();
 const container = document.getElementById('container');
 const gallery = document.getElementById('gallery');
 
-import pako from 'pako';
-
 // Track cursor positions and images
 let cursors = {};
 const DEFAULT_CURSOR = "data:image/svg+xml;base64," + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M7,4 L25,16 L14,17 L12,28 L7,4" fill="white" stroke="black" stroke-width="1.5"/></svg>`);
@@ -12,212 +10,8 @@ let currentPage = 1;
 const itemsPerPage = 20;
 let totalCursors = 0;
 
-async function convertToCur(imageUrl) {
-  const response = await fetch(imageUrl);
-  const blob = await response.blob();
-  
-  // Create an image to get dimensions
-  const img = await createImageBitmap(blob);
-  const canvas = document.createElement('canvas');
-  canvas.width = 32;  // Standard cursor size
-  canvas.height = 32;
-  const ctx = canvas.getContext('2d');
-  
-  // Draw and scale image
-  ctx.drawImage(img, 0, 0, 32, 32);
-  
-  // Get image data
-  const imageData = ctx.getImageData(0, 0, 32, 32);
-  const data = imageData.data;
-  
-  // CUR file header (22 bytes)
-  const header = new Uint8Array([
-    0x00, 0x00,             // Reserved
-    0x02, 0x00,             // Type (1 for ICO, 2 for CUR)
-    0x01, 0x00,             // Number of images
-    0x20, 0x20,             // Width, height (32x32)
-    0x00,                   // Color palette
-    0x00,                   // Reserved
-    0x01, 0x00,             // Color planes
-    0x08, 0x00,             // Bits per pixel
-    0x16, 0x00, 0x00, 0x00, // Size of image data
-    0x16, 0x00, 0x00, 0x00  // Offset to image data
-  ]);
-
-  // Hotspot data (4 bytes)
-  const hotspot = new Uint8Array([
-    0x00, 0x00,             // X hotspot
-    0x00, 0x00              // Y hotspot
-  ]);
-
-  // Convert RGBA to AND and XOR masks
-  const masks = new Uint8Array(32 * 32 * 2);  // Space for both AND and XOR masks
-  let andIdx = 0;
-  let xorIdx = 32 * 32;
-  
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      const i = (y * 32 + x) * 4;
-      const alpha = data[i + 3];
-      
-      // Set AND mask (1 for transparent, 0 for opaque)
-      if (alpha < 128) {
-        masks[andIdx + Math.floor(x / 8)] |= (1 << (7 - (x % 8)));
-      }
-      
-      // Set XOR mask (actual color data)
-      if (alpha >= 128) {
-        masks[xorIdx + y * 32 + x] = 0xFF;  // White for visible pixels
-      }
-    }
-    andIdx += 4;  // 32 bits = 4 bytes per row
-  }
-
-  // Combine all parts
-  const curData = new Uint8Array(header.length + hotspot.length + masks.length);
-  curData.set(header, 0);
-  curData.set(hotspot, header.length);
-  curData.set(masks, header.length + hotspot.length);
-  
-  return new Blob([curData], { type: 'application/x-cursor' });
-}
-
-async function convertToXCursor(imageUrl) {
-  const response = await fetch(imageUrl);
-  const blob = await response.blob();
-  
-  // Create an image to get dimensions
-  const img = await createImageBitmap(blob);
-  const canvas = document.createElement('canvas');
-  canvas.width = 32;
-  canvas.height = 32;
-  const ctx = canvas.getContext('2d');
-  
-  // Draw and scale image
-  ctx.drawImage(img, 0, 0, 32, 32);
-  
-  // Get image data
-  const imageData = ctx.getImageData(0, 0, 32, 32);
-  const data = imageData.data;
-
-  // Xcursor header
-  const header = new Uint8Array([
-    0x58, 0x63, 0x75, 0x72, // Magic "Xcur"
-    0x00, 0x00, 0x00, 0x00, // Header size
-    0x01, 0x00, 0x00, 0x00, // Version
-    0x01, 0x00, 0x00, 0x00  // Number of images
-  ]);
-
-  // Image header
-  const imgHeader = new Uint8Array([
-    0x20, 0x00, 0x00, 0x00, // Width (32)
-    0x20, 0x00, 0x00, 0x00, // Height (32)
-    0x00, 0x00, 0x00, 0x00, // Xhot (0)
-    0x00, 0x00, 0x00, 0x00, // Yhot (0)
-    0x00, 0x04, 0x00, 0x00  // Delay (1024ms)
-  ]);
-
-  // Convert RGBA to ARGB format
-  const pixels = new Uint8Array(32 * 32 * 4);
-  for (let i = 0; i < data.length; i += 4) {
-    const offset = i;
-    pixels[offset] = data[i + 3];     // Alpha
-    pixels[offset + 1] = data[i];     // Red
-    pixels[offset + 2] = data[i + 1]; // Green
-    pixels[offset + 3] = data[i + 2]; // Blue
-  }
-
-  // Compress pixel data with GZIP
-  const compressed = pako.gzip(pixels);
-
-  // Create final xcursor file
-  const xcursorData = new Uint8Array(header.length + imgHeader.length + compressed.length);
-  xcursorData.set(header, 0);
-  xcursorData.set(imgHeader, header.length);
-  xcursorData.set(compressed, header.length + imgHeader.length);
-
-  return new Blob([xcursorData], { type: 'application/x-cursor' });
-}
-
-async function generateCursor() {
-  const prompt = document.getElementById('prompt').value;
-  if (!prompt) return;
-
-  try {
-    // Generate image with white background
-    const result = await websim.imageGen({
-      prompt: prompt + " on pure white background",
-      width: 256,
-      height: 256
-    });
-
-    // Use the generated image URL directly
-    const generatedImageUrl = result.url;
-
-    // Create a canvas to process the image
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.src = generatedImageUrl;
-
-    await new Promise((resolve) => {
-      img.onload = resolve;
-    });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-
-    // Remove white background
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      // If pixel is close to white, make it transparent
-      if (r > 240 && g > 240 && b > 240) {
-        data[i + 3] = 0;
-      }
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-
-    // Convert the canvas to a blob and upload it
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
-    // Upload the image and get a URL
-    const cursorUrl = await websim.upload(blob);
-
-    // Store the cursor in the database
-    await room.collection('cursor').create({
-      imageUrl: cursorUrl,
-      prompt: prompt
-    });
-
-    // Make sure we include both position and image in the update
-    const currentX = room.presence[room.clientId]?.x || 0;
-    const currentY = room.presence[room.clientId]?.y || 0;
-
-    room.updatePresence({
-      x: currentX,
-      y: currentY,
-      cursorImage: cursorUrl
-    });
-
-  } catch (error) {
-    console.error('Error generating cursor:', error);
-  }
-}
-
 async function initialize() {
   await room.initialize();
-
-  // Add event listener for generate button
-  document.getElementById('generate-button').addEventListener('click', generateCursor);
 
   // Add start button functionality
   const startButton = document.getElementById('start-button');
@@ -362,43 +156,31 @@ async function updateGallery() {
       item.appendChild(img);
       item.appendChild(prompt);
 
-      // Add download buttons container
-      const downloadButtons = document.createElement('div');
-      downloadButtons.className = 'download-buttons';
-
-      // Windows .cur download button
-      const winButton = document.createElement('button');
-      winButton.className = 'download-btn';
-      winButton.textContent = 'Win';
-      winButton.onclick = async (e) => {
+      // Add download options
+      const downloadContainer = document.createElement('div');
+      downloadContainer.className = 'download-options';
+      
+      const winBtn = document.createElement('button');
+      winBtn.className = 'download-btn win';
+      winBtn.title = 'Download for Windows';
+      winBtn.innerHTML = '<span>Win</span>';
+      winBtn.onclick = (e) => {
         e.stopPropagation();
-        const curBlob = await convertToCur(cursor.imageUrl);
-        const curUrl = URL.createObjectURL(curBlob);
-        const a = document.createElement('a');
-        a.href = curUrl;
-        a.download = `${cursor.prompt || 'cursor'}.cur`;
-        a.click();
-        URL.revokeObjectURL(curUrl);
+        downloadCursorAsWin(cursor.imageUrl, (cursor.prompt || 'cursor').replace(/\s+/g, '_'));
       };
-
-      // Linux .xcursor download button
-      const linuxButton = document.createElement('button');
-      linuxButton.className = 'download-btn';
-      linuxButton.textContent = 'Linux';
-      linuxButton.onclick = async (e) => {
+      
+      const linuxBtn = document.createElement('button');
+      linuxBtn.className = 'download-btn linux';
+      linuxBtn.title = 'Download for Linux';
+      linuxBtn.innerHTML = '<span>Linux</span>';
+      linuxBtn.onclick = (e) => {
         e.stopPropagation();
-        const xcursorBlob = await convertToXCursor(cursor.imageUrl);
-        const xcursorUrl = URL.createObjectURL(xcursorBlob);
-        const a = document.createElement('a');
-        a.href = xcursorUrl;
-        a.download = `${cursor.prompt || 'cursor'}.xcursor`;
-        a.click();
-        URL.revokeObjectURL(xcursorUrl);
+        downloadCursorAsLinux(cursor.imageUrl, (cursor.prompt || 'cursor').replace(/\s+/g, '_'));
       };
-
-      downloadButtons.appendChild(winButton);
-      downloadButtons.appendChild(linuxButton);
-      item.appendChild(downloadButtons);
+      
+      downloadContainer.appendChild(winBtn);
+      downloadContainer.appendChild(linuxBtn);
+      item.appendChild(downloadContainer);
 
       item.onclick = () => {
         const currentX = room.presence[room.clientId]?.x || 0;
@@ -491,5 +273,279 @@ function previousPage() {
   }
 }
 
-// Initialize everything
+async function generateCursor() {
+  const prompt = document.getElementById('prompt').value;
+  if (!prompt) return;
+
+  try {
+    // Generate image with white background
+    const result = await websim.imageGen({
+      prompt: prompt + " on pure white background",
+      width: 256,
+      height: 256
+    });
+
+    // Use the generated image URL directly
+    const generatedImageUrl = result.url;
+
+    // Create a canvas to process the image
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = generatedImageUrl;
+
+    await new Promise((resolve) => {
+      img.onload = resolve;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    // Remove white background
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+
+      // If pixel is close to white, make it transparent
+      if (r > 240 && g > 240 && b > 240) {
+        data[i + 3] = 0;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Convert the canvas to a blob and upload it
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+    // Upload the image and get a URL
+    const cursorUrl = await websim.upload(blob);
+
+    // Store the cursor in the database
+    await room.collection('cursor').create({
+      imageUrl: cursorUrl,
+      prompt: prompt
+    });
+
+    // Make sure we include both position and image in the update
+    const currentX = room.presence[room.clientId]?.x || 0;
+    const currentY = room.presence[room.clientId]?.y || 0;
+
+    room.updatePresence({
+      x: currentX,
+      y: currentY,
+      cursorImage: cursorUrl
+    });
+
+  } catch (error) {
+    console.error('Error generating cursor:', error);
+  }
+}
+
+// Function to convert and download cursor as Windows .cur file
+async function downloadCursorAsWin(imageUrl, fileName) {
+  try {
+    // Load the image
+    const img = await loadImage(imageUrl);
+    
+    // Create a canvas with 32x32 size (standard cursor size)
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the image on the canvas, scaling it to fit
+    ctx.drawImage(img, 0, 0, 32, 32);
+    
+    // Create .cur file format (binary format)
+    // CUR file header structure:
+    // 0-1: Reserved, must be 0
+    // 2-3: Type (1 for CUR files)
+    // 4-5: Number of images in the file (1 in our case)
+    const headerReserved = new Uint16Array([0]);
+    const headerType = new Uint16Array([2]); // 2 for CUR files
+    const headerCount = new Uint16Array([1]); // 1 image
+    
+    // Directory entry structure for the image:
+    // 0: Width (32)
+    // 1: Height (32)
+    // 2: Color palette size (0, using true color)
+    // 3: Reserved (0)
+    // 4-5: Hotspot X (center point: 16)
+    // 6-7: Hotspot Y (center point: 16)
+    // 8-11: Size of image data in bytes (calculate after getting image data)
+    // 12-15: Offset of image data from start of file (always 22 for one image)
+    const dirWidth = new Uint8Array([32]);
+    const dirHeight = new Uint8Array([32]);
+    const dirColorCount = new Uint8Array([0]);
+    const dirReserved = new Uint8Array([0]);
+    const dirHotspotX = new Uint16Array([16]); // Center of 32x32 image
+    const dirHotspotY = new Uint16Array([16]); // Center of 32x32 image
+    
+    // Get image data as PNG
+    const blob = await new Promise(resolve => {
+      canvas.toBlob(resolve, 'image/png');
+    });
+    
+    const imageData = await blob.arrayBuffer();
+    const imageDataSize = new Uint32Array([imageData.byteLength]);
+    const imageDataOffset = new Uint32Array([22]); // Header(6) + Directory entry(16)
+    
+    // Combine all parts into a single binary file
+    const fileSize = 6 + 16 + imageData.byteLength;
+    const buffer = new ArrayBuffer(fileSize);
+    const dataView = new DataView(buffer);
+    
+    let position = 0;
+    
+    // Write header
+    new Uint8Array(buffer, position, 2).set(new Uint8Array(headerReserved.buffer));
+    position += 2;
+    new Uint8Array(buffer, position, 2).set(new Uint8Array(headerType.buffer));
+    position += 2;
+    new Uint8Array(buffer, position, 2).set(new Uint8Array(headerCount.buffer));
+    position += 2;
+    
+    // Write directory entry
+    new Uint8Array(buffer, position, 1).set(dirWidth);
+    position += 1;
+    new Uint8Array(buffer, position, 1).set(dirHeight);
+    position += 1;
+    new Uint8Array(buffer, position, 1).set(dirColorCount);
+    position += 1;
+    new Uint8Array(buffer, position, 1).set(dirReserved);
+    position += 1;
+    new Uint8Array(buffer, position, 2).set(new Uint8Array(dirHotspotX.buffer));
+    position += 2;
+    new Uint8Array(buffer, position, 2).set(new Uint8Array(dirHotspotY.buffer));
+    position += 2;
+    new Uint8Array(buffer, position, 4).set(new Uint8Array(imageDataSize.buffer));
+    position += 4;
+    new Uint8Array(buffer, position, 4).set(new Uint8Array(imageDataOffset.buffer));
+    position += 4;
+    
+    // Write image data
+    new Uint8Array(buffer, position).set(new Uint8Array(imageData));
+    
+    // Create and download the file
+    const curBlob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(curBlob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${fileName}.cur`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+  } catch (error) {
+    console.error('Error downloading Windows cursor:', error);
+  }
+}
+
+// Function to convert and download cursor as Linux .xcursor file
+async function downloadCursorAsLinux(imageUrl, fileName) {
+  try {
+    // Load the image
+    const img = await loadImage(imageUrl);
+    
+    // Create a canvas with 32x32 size (standard cursor size)
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the image on the canvas
+    ctx.drawImage(img, 0, 0, 32, 32);
+    
+    // Get image data
+    const imageData = ctx.getImageData(0, 0, 32, 32);
+    const data = imageData.data;
+    
+    // Create Xcursor file header and chunks
+    // Xcursor header: "Xcur" + file version (0x0100) + number of chunks (1)
+    const xcursorMagic = 0x72756358; // "Xcur" in little-endian
+    const xcursorVersion = 0x0100; // Version 1.0
+    const numChunks = 1;
+    
+    // Chunk header: chunk type + subtype + nominal size + version + length
+    const chunkType = 0xFFFD0002; // ARGB image data
+    const subtype = 1; // Cursor subtype
+    const nominalSize = 32; // 32x32 pixels
+    const chunkVersion = 1;
+    const chunkLength = 36 + (32 * 32 * 4); // 36 bytes header + pixel data
+    
+    // Prepare the buffer
+    const bufferSize = 16 + chunkLength; // 16 for file header + chunk data
+    const buffer = new ArrayBuffer(bufferSize);
+    const dataView = new DataView(buffer);
+    
+    // Write file header
+    dataView.setUint32(0, xcursorMagic, true); // true for little-endian
+    dataView.setUint32(4, xcursorVersion, true);
+    dataView.setUint32(8, numChunks, true);
+    
+    // Write chunk header
+    let offset = 12; // After file header
+    dataView.setUint32(offset, chunkType, true);
+    offset += 4;
+    dataView.setUint32(offset, subtype, true);
+    offset += 4;
+    dataView.setUint32(offset, nominalSize, true);
+    offset += 4;
+    dataView.setUint32(offset, 16, true); // Hotspot X
+    offset += 4;
+    dataView.setUint32(offset, 16, true); // Hotspot Y
+    offset += 4;
+    dataView.setUint32(offset, 0, true); // Delay (unused for static cursors)
+    offset += 4;
+    
+    // Write pixel data - ARGB format with premultiplied alpha
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3];
+      const red = data[i];
+      const green = data[i + 1];
+      const blue = data[i + 2];
+      
+      // Write a premultiplied ARGB pixel at current position
+      dataView.setUint8(offset++, blue);
+      dataView.setUint8(offset++, green);
+      dataView.setUint8(offset++, red);
+      dataView.setUint8(offset++, alpha);
+    }
+    
+    // Create and download the file
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${fileName}.xcursor`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+  } catch (error) {
+    console.error('Error downloading Linux cursor:', error);
+  }
+}
+
+// Helper function to load an image and return a Promise
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+}
+
 initialize();
