@@ -27,7 +27,7 @@ function getPeers() {
 }
 
 // Subscribe to presence changes with a callback
-function subscribeToPresence(callback) {
+function subscribePresence(callback) {
   return room.subscribePresence(callback);
 }
 
@@ -58,7 +58,7 @@ window.websocketService = {
   getCurrentPresence,
   getClientId,
   getPeers,
-  subscribeToPresence,
+  subscribePresence,
   getCursorsList,
   createCursor,
   subscribeToCursors
